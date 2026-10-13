@@ -31,12 +31,12 @@ def render_table(report: Report, verbose: bool = False) -> str:
 
 def render_markdown(report: Report, verbose: bool = False) -> str:
     output = []
-    
+
     # Header
     output.append(f"# mcp-auth-doctor {__version__}")
     output.append(f"**spec :** {report.spec} \n")
     output.append(f"**URL :** {report.url}")
-    
+
     # Diagnostics
     output.append("| Check ID | Status | Reason |")
     output.append("|---|---|---|")
@@ -50,7 +50,7 @@ def render_markdown(report: Report, verbose: bool = False) -> str:
         output.append(f"| {check.id} | {label} | {reason} |")
     counts = report.counts()
     output.append("")
-    
+
     # Summary
     output.append(
         f"{counts['pass']} pass, {counts['fail']} fail, {counts['warn']} warn, "

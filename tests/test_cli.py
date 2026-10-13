@@ -93,8 +93,8 @@ def test_markdown_output_row_count(router, capsys):
     report = json.loads(capsys.readouterr().out)
 
     assert len(data_rows) == len(report["checks"])
-    
-    
+
+
 def test_markdown_preserves_failure_reason(router, capsys):
     mount(router, resource=MCP + "/")
 
