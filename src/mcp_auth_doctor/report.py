@@ -29,6 +29,36 @@ def render_table(report: Report, verbose: bool = False) -> str:
     return "\n".join(lines)
 
 
+def render_markdown(report: Report, verbose: bool = False) -> str:
+    output = []
+    
+    # Header
+    output.append(f"# mcp-auth-doctor {__version__}")
+    output.append(f"**spec :** {report.spec} \n")
+    output.append(f"**URL :** {report.url}")
+    
+    # Diagnostics
+    output.append("| Check ID | Status | Reason |")
+    output.append("|---|---|---|")
+    for check in report.checks:
+        label = STATUS_LABEL.get(check.status, check.status)
+        reason = check.reason
+        if verbose or check.status in (FAIL, WARN):
+            evidence = _evidence_lines(check.evidence)
+            if evidence:
+                reason += "<br>" + "<br>".join(evidence)
+        output.append(f"| {check.id} | {label} | {reason} |")
+    counts = report.counts()
+    output.append("")
+    
+    # Summary
+    output.append(
+        f"{counts['pass']} pass, {counts['fail']} fail, {counts['warn']} warn, "
+        f"{counts['skip']} skip. Verdict: {report.verdict.upper()} (exit {report.exit_code})"
+    )
+    return "\n".join(output)
+
+
 def _evidence_lines(evidence: dict[str, Any]) -> list[str]:
     lines: list[str] = []
     for key, value in evidence.items():

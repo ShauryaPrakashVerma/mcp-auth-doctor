@@ -72,3 +72,45 @@ def test_callback_port_validation():
     with pytest.raises(SystemExit) as exc:
         main(["https://mcp.example.com/mcp", "--callback-port", "70000"])
     assert exc.value.code == 3
+
+
+def test_markdown_output_row_count(router, capsys):
+    mount(router)
+
+    assert main([MCP, "--format", "markdown"]) == 0
+    markdown = capsys.readouterr().out
+
+    # Count table rows, excluding the header and separator.
+    table_rows = [
+        line
+        for line in markdown.splitlines()
+        if line.startswith("|") and not line.startswith("|---")
+    ]
+    data_rows = table_rows[1:]
+
+    # Get the expected number of checks from the JSON report.
+    assert main([MCP, "--format", "json"]) == 0
+    report = json.loads(capsys.readouterr().out)
+
+    assert len(data_rows) == len(report["checks"])
+    
+    
+def test_markdown_preserves_failure_reason(router, capsys):
+    mount(router, resource=MCP + "/")
+
+    # Generate the Markdown report for a failing check.
+    assert main([MCP, "--format", "markdown"]) == 1
+    markdown = capsys.readouterr().out
+
+    # Get the original failure reason from the JSON report.
+    assert main([MCP, "--format", "json"]) == 1
+    report = json.loads(capsys.readouterr().out)
+
+    failed_checks = [
+        check for check in report["checks"]
+        if check["status"] == "fail"
+    ]
+    assert failed_checks
+
+    for check in failed_checks:
+        assert check["reason"] in markdown
