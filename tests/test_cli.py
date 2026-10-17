@@ -1,9 +1,12 @@
 import json
+import re
+from types import SimpleNamespace
 
 import pytest
 
 from mcp_auth_doctor import __version__
 from mcp_auth_doctor.cli import main
+from mcp_auth_doctor.report import render_markdown
 from tests.conftest import MCP, mount
 
 
@@ -106,11 +109,66 @@ def test_markdown_preserves_failure_reason(router, capsys):
     assert main([MCP, "--format", "json"]) == 1
     report = json.loads(capsys.readouterr().out)
 
-    failed_checks = [
-        check for check in report["checks"]
-        if check["status"] == "fail"
-    ]
+    failed_checks = [check for check in report["checks"] if check["status"] == "fail"]
     assert failed_checks
 
     for check in failed_checks:
         assert check["reason"] in markdown
+
+
+def test_markdown_evidence_pipe_does_not_break_table():
+    check = SimpleNamespace(
+        id="unauth-401",
+        status="warn",
+        reason="Request failed",
+        evidence={"header": "WWW-Authenticate | Bearer"},
+    )
+
+    report = SimpleNamespace(
+        spec="2026-07-28",
+        url="https://mcp.example.com/mcp",
+        checks=[check],
+        counts=lambda: {"pass": 0, "fail": 0, "warn": 1, "skip": 0},
+        verdict="warn",
+        exit_code=0,
+    )
+
+    markdown = render_markdown(report, verbose=True)
+
+    row = next(line for line in markdown.splitlines() if line.startswith("| unauth-401 |"))
+
+    assert r"WWW-Authenticate \| Bearer" in row
+    assert row.count("|") == 5
+
+
+def _report(reason, evidence):
+    check = SimpleNamespace(id="unauth-401", status="warn", reason=reason, evidence=evidence)
+    return SimpleNamespace(
+        spec="2026-07-28",
+        url="https://mcp.example.com/mcp",
+        checks=[check],
+        counts=lambda: {"pass": 0, "fail": 0, "warn": 1, "skip": 0},
+        verdict="warn",
+        exit_code=0,
+    )
+
+
+def _unescaped_pipes(row):
+    return len(re.findall(r"(?<!\\)\|", row))
+
+
+@pytest.mark.parametrize(
+    "reason, evidence, escaped",
+    [
+        ("Expected status | received 401", {}, r"Expected status \| received 401"),
+        ("Request failed", {"header": "WWW-Authenticate | Bearer"}, r"WWW-Authenticate \| Bearer"),
+        ("Request failed", {"header": 'realm="a|b"\nsecond line'}, r"a\|b"),
+    ],
+)
+def test_markdown_pipes_and_newlines_stay_in_one_row(reason, evidence, escaped):
+    markdown = render_markdown(_report(reason, evidence), verbose=True)
+    rows = [line for line in markdown.splitlines() if line.startswith("| unauth-401 |")]
+
+    assert len(rows) == 1
+    assert escaped in rows[0]
+    assert _unescaped_pipes(rows[0]) == 4  # 3 columns -> 4 separators
